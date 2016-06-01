@@ -68,6 +68,8 @@ class Manager {
 
 	public function getServers(): array;
 
+	public function getReadConcern() : ReadConcern;
+
 	public function getReadPreference() : ReadPreference;
 
 	public function getWriteConcern() : WriteConcern;
@@ -153,6 +155,13 @@ final class BulkWrite implements \Countable {
 	public function __debugInfo() : array;
 }
 
+final class ReadConcern {
+	public function __construct(?string $level = NULL) : void;
+
+	public function getLevel() : mixed;
+
+	public function __debugInfo() : array;
+}
 
 final class ReadPreference {
 	const RP_PRIMARY = 1;
