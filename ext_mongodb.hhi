@@ -290,12 +290,12 @@ interface Type
 
 interface Serializable extends Type
 {
-	public function bsonSerialize() : array;
+	public function bsonSerialize() : mixed;
 }
 
 interface Unserializable
 {
-	public function bsonUnserialize(array $data) : void;
+	public function bsonUnserialize(array<arraykey,mixed> $data) : void;
 }
 
 interface Persistable extends Serializable, Unserializable
