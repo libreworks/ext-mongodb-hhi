@@ -306,6 +306,14 @@ final class Binary implements Type, \Serializable
 {
 	use DenySerialization;
 
+	const int TYPE_GENERIC = 0;
+	const int TYPE_FUNCTION = 1;
+	const int TYPE_OLD_BINARY = 2;
+	const int TYPE_OLD_UUID = 3;
+	const int TYPE_UUID = 4;
+	const int TYPE_MD5 = 5;
+	const int TYPE_USER_DEFINED = 128;
+
 	public function __construct(string $data, int $type) { }
 
 	public function getType() { }
