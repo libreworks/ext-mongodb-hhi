@@ -56,7 +56,7 @@ final class WriteResult {
 
 class Manager {
 
-	public function __construct(string $dsn = "mongodb://localhost", array $options = array(), array $driverOptions = array());
+	public function __construct(string $dsn = "mongodb://127.0.0.1/", array $options = array(), array $driverOptions = array());
 
 	public function __debugInfo() : array;
 
@@ -118,7 +118,7 @@ final class Cursor<T> implements \Traversable<T>, \Iterator<T> {
 
 	public function toArray(): array<T>;
 
-	public function setTypeMap(array<string,?string> $typemap): void;
+	public function setTypeMap(array<string,mixed> $typemap): void;
 }
 
 final class Command {
@@ -269,6 +269,62 @@ abstract class WriteException extends RuntimeException
 
 namespace MongoDB\BSON;
 
+interface TypeWrapper
+{
+	static public function createFromBSONType(\MongoDB\BSON\Type $type) : \MongoDB\BSON\TypeWrapper;
+	public function toBSONType();
+}
+interface BinaryInterface
+{
+	public function getType() : int;
+	public function getData() : string;
+	public function __toString() : string;
+}
+
+interface Decimal128Interface
+{
+	public function __toString() : string;
+}
+
+interface JavascriptInterface
+{
+	public function getCode() : string;
+	public function getScope() : mixed;
+	public function __toString() : string;
+}
+
+interface MaxKeyInterface
+{
+}
+
+interface MinKeyInterface
+{
+}
+
+interface ObjectIDInterface
+{
+	public function getTimestamp() : int;
+	public function __toString() : string;
+}
+
+interface RegexInterface
+{
+	public function getPattern() : string;
+	public function getFlags() : string;
+	public function __toString() : string;
+}
+
+interface TimestampInterface
+{
+	public function __toString() : string;
+}
+
+interface UTCDateTimeInterface
+{
+	public function toDateTime() : \DateTime;
+	public function __toString() : string;
+}
+
 function fromPHP(mixed $data) : string;
 
 function fromJson(string $data) : mixed;
@@ -302,9 +358,11 @@ interface Persistable extends Serializable, Unserializable
 {
 }
 
-final class Binary implements Type, \Serializable
+final class Binary implements Type, \Serializable, BinaryInterface
 {
-	use DenySerialization;
+	public function serialize() : string { }
+
+	public function unserialize(mixed $serialized) : void { }
 
 	const int TYPE_GENERIC = 0;
 	const int TYPE_FUNCTION = 1;
@@ -314,53 +372,97 @@ final class Binary implements Type, \Serializable
 	const int TYPE_MD5 = 5;
 	const int TYPE_USER_DEFINED = 128;
 
-	public function __construct(string $data, int $type) { }
+	public function __construct(private string $data, private int $type) { }
 
-	public function getType() { }
+	static public function __set_state(array $state) { }
+
+	public function getType() : int { }
 
 	public function getData() : string { }
+
+	public function __toString() : string { }
 
 	public function __debugInfo() : array;
 }
 
-final class Javascript implements Type, \Serializable
+final class Decimal128 implements Type, \Serializable, Decimal128Interface
 {
-	use DenySerialization;
+	public function serialize() : string { }
 
-	public function __construct(string $code, mixed $scope = NULL) { }
+	public function unserialize(mixed $serialized) : void { }
+
+	public function __construct(string $decimal) { }
+
+	static public function __set_state(array $state) { }
+
+	public function __toString() : string { }
 
 	public function __debugInfo() : array { }
 }
 
-final class MaxKey implements Type, \Serializable
+final class Javascript implements Type, \Serializable, JavascriptInterface
 {
-	use DenySerialization;
+	public function serialize() : string { }
+
+	public function unserialize(mixed $serialized) : void { }
+
+	public function __construct(string $code, mixed $scope = NULL)	{ }
+
+	static public function __set_state(array $state) { }
+
+	public function __debugInfo() : array { }
+
+	public function getCode() : string { }
+
+	public function getScope() : mixed { }
+
+	public function __toString() : string { }
 }
 
-final class MinKey implements Type, \Serializable
+final class MaxKey implements Type, \Serializable, MaxKeyInterface
 {
-	use DenySerialization;
+	public function serialize() : string { }
+
+	public function unserialize(mixed $serialized) : void { }
+
+	static public function __set_state(array $state) { }
 }
 
-final class ObjectID implements Type, \Serializable
+final class MinKey implements Type, \Serializable, MinKeyInterface
 {
-	use DenySerialization;
+	public function serialize() : string { }
 
+	public function unserialize(mixed $serialized) : void { }
 
-	public function __construct(?string $objectId = null);
-
-
-	public function __toString() : string;
-
-
-	public function __debugInfo() : array;
+	static public function __set_state(array $state) { }
 }
 
-final class Regex implements Type, \Serializable
+final class ObjectID implements Type, \Serializable, ObjectIDInterface
 {
-	use DenySerialization;
+	public function serialize() : string { }
 
-	public function __construct(string $pattern, string $flags) { }
+	public function unserialize(mixed $serialized) : void { }
+
+	public function __construct(?string $objectId = null) { }
+
+	static public function __set_state(array $state) { }
+
+	public function __toString() : string { }
+
+	public function __debugInfo() : array { }
+
+	public function getTimestamp() : int { }
+}
+
+final class Regex implements Type, \Serializable, RegexInterface
+{
+	public function serialize() : string { }
+
+	public function unserialize(mixed $serialized) : void { }
+
+	public function __construct(string $pattern, string $flags = '') { }
+
+	static public function __set_state(array $state) { }
 
 	public function getPattern() : string { }
 
@@ -371,26 +473,34 @@ final class Regex implements Type, \Serializable
 	public function __debugInfo() : array { }
 }
 
-final class Timestamp implements Type, \Serializable
+final class Timestamp implements Type, \Serializable, TimestampInterface
 {
-	use DenySerialization;
+	public function serialize() : string { }
 
-	public function __construct(int $increment, int $timestamp) { }
+	public function unserialize(mixed $serialized) : void { }
+
+	public function __construct(mixed $increment, mixed $timestamp) { }
+
+	static public function __set_state(array $state) { }
 
 	public function __toString() : string { }
 
 	public function __debugInfo() : array { }
 }
 
-final class UTCDateTime implements Type, \Serializable
+final class UTCDateTime implements Type, \Serializable, UTCDateTimeInterface
 {
-	use DenySerialization;
+	public function serialize() : string { }
 
-	public function __construct(mixed $milliseconds);
+	public function unserialize(mixed $serialized) : void { }
+
+	public function __construct(mixed $milliseconds = NULL) { }
+
+	static public function __set_state(array $state) { }
 
 	public function __toString() : string { }
 
-	public function toDateTime() : \DateTime;
+	public function toDateTime() : \DateTime { }
 
 	public function __debugInfo() : array { }
 }
