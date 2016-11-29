@@ -4,6 +4,69 @@
  * This is the public API of the new MongoDB driver for use with the Hack type
  * checker. This file should never be included.
  */
+namespace MongoDB\BSON;
+
+interface Type
+{
+}
+
+interface Serializable extends Type
+{
+	public function bsonSerialize() : mixed;
+}
+
+interface Unserializable
+{
+	public function bsonUnserialize(array $data) : void;
+}
+
+interface Persistable extends Serializable, Unserializable
+{
+}
+
+namespace MongoDB\Driver\Monitoring;
+
+abstract class _CommandEvent
+{
+	public function getCommandName() : string {}
+
+	public function getServer() : \MongoDB\Driver\Server {}
+
+	public function getOperationId() : string {}
+
+	public function getRequestId() : string {}
+}
+
+abstract class _CommandResultEvent extends _CommandEvent
+{
+	public function getDurationMicros() : int {}
+}
+
+final class CommandStartedEvent extends _CommandEvent
+{
+	public function getCommand() : mixed {}
+
+	public function getDatabaseName() : string {}
+}
+
+final class CommandSucceededEvent extends _CommandResultEvent
+{
+	public function getReply() : mixed {}
+}
+
+final class CommandFailedEvent extends _CommandResultEvent
+{
+	public function getError() : \MongoDB\Driver\Exception\Exception {}
+}
+
+interface Subscriber {}
+
+interface CommandSubscriber extends Subscriber
+{
+	public function commandStarted( \MongoDB\Driver\Monitoring\CommandStartedEvent $event );
+	public function commandSucceeded( \MongoDB\Driver\Monitoring\CommandSucceededEvent $event );
+	public function commandFailed( \MongoDB\Driver\Monitoring\CommandFailedEvent $event );
+}
 
 namespace MongoDB\Driver;
 
@@ -54,9 +117,9 @@ final class WriteResult {
 	public function __debugInfo() : array { }
 }
 
-class Manager {
+final class Manager {
 
-	public function __construct(string $dsn = "mongodb://127.0.0.1/", array $options = array(), array $driverOptions = array());
+	public function __construct(string $dsn = "", array $options = array(), array $driverOptions = array());
 
 	public function __debugInfo() : array;
 
@@ -74,9 +137,13 @@ class Manager {
 
 	public function getWriteConcern() : WriteConcern;
 
-	public function __wakeUp() : void;
+	public function __wakeup() : void;
 
 	public function selectServer(ReadPreference $readPreference): Server;
+
+	public function addSubscriber( Monitoring\Subscriber $subscriber ) : void;
+
+	public function removeSubscriber( Monitoring\Subscriber $subscriber ) : void;
 }
 
 class Utils {
@@ -125,7 +192,7 @@ final class Command {
 
 	public function __construct(mixed $command) { }
 
-	public function __debugInfo() { }
+	public function __debugInfo(): array { }
 }
 
 final class Query {
@@ -139,44 +206,46 @@ final class BulkWrite implements \Countable {
 
 	public function __construct(?array $bulkWriteOptions = array());
 
-
 	public function insert(mixed $document) : mixed;
 
+	public function update(mixed $query, mixed $update, ?array $options = []) : void;
 
-	public function update(mixed $query, mixed $newObj, ?array $updateOptions = array()) : void;
-
-
-	public function delete(mixed $query, ?array $deleteOptions = array()) : void;
-
+	public function delete(mixed $query, ?array $options = []) : void;
 
 	public function count() : int;
-
 
 	public function __debugInfo() : array;
 }
 
-final class ReadConcern {
+final class ReadConcern implements \MongoDB\BSON\Serializable {
+
 	public function __construct(?string $level = NULL) : void;
 
 	public function getLevel() : mixed;
 
 	public function __debugInfo() : array;
+
+	public function bsonSerialize() : mixed;
 }
 
-final class ReadPreference {
+final class ReadPreference implements \MongoDB\BSON\Serializable {
 	const RP_PRIMARY = 1;
-    const RP_PRIMARY_PREFERRED = 5;
-    const RP_SECONDARY = 2;
-    const RP_SECONDARY_PREFERRED = 6;
-    const RP_NEAREST = 10;
+	const RP_PRIMARY_PREFERRED = 5;
+	const RP_SECONDARY = 2;
+	const RP_SECONDARY_PREFERRED = 6;
+	const RP_NEAREST = 10;
 
-	public function __construct(int $readPreference, ?array $tagSets = null) { }
+	public function __construct(int $readPreference, ?array $tagSets = null, ?array $options = [] ) { }
 
 	public function getMode() : int;
 
 	public function getTagSets() : array;
 
+	public function getMaxStalenessSeconds() : int;
+
 	public function __debugInfo() : array;
+
+	public function bsonSerialize() : mixed;
 }
 
 final class Server {
@@ -185,62 +254,47 @@ final class Server {
 
 	public function getHost(): string;
 
-
 	final public function getInfo(): array;
-
 
 	public function getLatency() : int;
 
-
 	public function getPort(): int;
-
 
 	public function getTags() : array;
 
-
 	public function getType(): int;
-
 
 	public function isPrimary() : bool;
 
-
 	public function isSecondary() : bool;
-
 
 	public function isArbiter() : bool;
 
-
 	public function isHidden() : bool;
-
 
 	public function isPassive() : bool;
 
-
 	public function executeBulkWrite(string $namespace, BulkWrite $bulk, ?WriteConcern $writeConcern = null): WriteResult;
 
-
 	public function executeCommand(string $db, Command $command, ?ReadPreference $readPreference = null): Cursor;
-
 
 	public function executeQuery(string $namespace, Query $query, ?ReadPreference $readPreference = null): Cursor;
 }
 
-final class WriteConcern {
+final class WriteConcern implements \MongoDB\BSON\Serializable {
 	const MAJORITY = "majority";
 
 	public function __construct(mixed $w, ?int $wtimeout = 0, ?bool $journal = NULL);
 
-
 	public function getJournal() : mixed;
-
 
 	public function getW() : mixed;
 
-
 	public function getWtimeout() : int;
 
-
 	public function __debugInfo() : array;
+
+	public function bsonSerialize() : mixed;
 }
 
 
@@ -274,6 +328,7 @@ interface TypeWrapper
 	static public function createFromBSONType(\MongoDB\BSON\Type $type) : \MongoDB\BSON\TypeWrapper;
 	public function toBSONType();
 }
+
 interface BinaryInterface
 {
 	public function getType() : int;
@@ -340,30 +395,8 @@ trait DenySerialization
 	public function unserialize(mixed $data) : void { }
 }
 
-interface Type
+final class Binary implements Type, \Serializable, \JsonSerializable, BinaryInterface
 {
-}
-
-interface Serializable extends Type
-{
-	public function bsonSerialize() : mixed;
-}
-
-interface Unserializable
-{
-	public function bsonUnserialize(array<arraykey,mixed> $data) : void;
-}
-
-interface Persistable extends Serializable, Unserializable
-{
-}
-
-final class Binary implements Type, \Serializable, BinaryInterface
-{
-	public function serialize() : string { }
-
-	public function unserialize(mixed $serialized) : void { }
-
 	const int TYPE_GENERIC = 0;
 	const int TYPE_FUNCTION = 1;
 	const int TYPE_OLD_BINARY = 2;
@@ -372,7 +405,13 @@ final class Binary implements Type, \Serializable, BinaryInterface
 	const int TYPE_MD5 = 5;
 	const int TYPE_USER_DEFINED = 128;
 
-	public function __construct(private string $data, private int $type) { }
+	public function serialize() : string { }
+
+	public function jsonSerialize() : mixed { }
+
+	public function unserialize(mixed $serialized) : void { }
+
+	public function __construct(string $data, int $type) { }
 
 	static public function __set_state(array $state) { }
 
@@ -385,9 +424,11 @@ final class Binary implements Type, \Serializable, BinaryInterface
 	public function __debugInfo() : array;
 }
 
-final class Decimal128 implements Type, \Serializable, Decimal128Interface
+final class Decimal128 implements Type, \Serializable, \JsonSerializable, Decimal128Interface
 {
 	public function serialize() : string { }
+
+	public function jsonSerialize() : mixed { }
 
 	public function unserialize(mixed $serialized) : void { }
 
@@ -400,13 +441,15 @@ final class Decimal128 implements Type, \Serializable, Decimal128Interface
 	public function __debugInfo() : array { }
 }
 
-final class Javascript implements Type, \Serializable, JavascriptInterface
+final class Javascript implements Type, \Serializable, \JsonSerializable, JavascriptInterface
 {
 	public function serialize() : string { }
 
+	public function jsonSerialize() : mixed { }
+
 	public function unserialize(mixed $serialized) : void { }
 
-	public function __construct(string $code, mixed $scope = NULL)	{ }
+	public function __construct(string $code, mixed $scope = NULL) { }
 
 	static public function __set_state(array $state) { }
 
@@ -419,27 +462,33 @@ final class Javascript implements Type, \Serializable, JavascriptInterface
 	public function __toString() : string { }
 }
 
-final class MaxKey implements Type, \Serializable, MaxKeyInterface
+final class MaxKey implements Type, \Serializable, \JsonSerializable, MaxKeyInterface
 {
 	public function serialize() : string { }
+
+	public function jsonSerialize() : mixed { }
 
 	public function unserialize(mixed $serialized) : void { }
 
 	static public function __set_state(array $state) { }
 }
 
-final class MinKey implements Type, \Serializable, MinKeyInterface
+final class MinKey implements Type, \Serializable, \JsonSerializable, MinKeyInterface
 {
 	public function serialize() : string { }
+
+	public function jsonSerialize() : mixed { }
 
 	public function unserialize(mixed $serialized) : void { }
 
 	static public function __set_state(array $state) { }
 }
 
-final class ObjectID implements Type, \Serializable, ObjectIDInterface
+final class ObjectID implements Type, \Serializable, \JsonSerializable, ObjectIDInterface
 {
 	public function serialize() : string { }
+
+	public function jsonSerialize() : mixed { }
 
 	public function unserialize(mixed $serialized) : void { }
 
@@ -454,9 +503,11 @@ final class ObjectID implements Type, \Serializable, ObjectIDInterface
 	public function getTimestamp() : int { }
 }
 
-final class Regex implements Type, \Serializable, RegexInterface
+final class Regex implements Type, \Serializable, \JsonSerializable, RegexInterface
 {
 	public function serialize() : string { }
+
+	public function jsonSerialize() : mixed { }
 
 	public function unserialize(mixed $serialized) : void { }
 
@@ -473,9 +524,11 @@ final class Regex implements Type, \Serializable, RegexInterface
 	public function __debugInfo() : array { }
 }
 
-final class Timestamp implements Type, \Serializable, TimestampInterface
+final class Timestamp implements Type, \Serializable, \JsonSerializable, TimestampInterface
 {
 	public function serialize() : string { }
+
+	public function jsonSerialize() : mixed { }
 
 	public function unserialize(mixed $serialized) : void { }
 
@@ -488,9 +541,11 @@ final class Timestamp implements Type, \Serializable, TimestampInterface
 	public function __debugInfo() : array { }
 }
 
-final class UTCDateTime implements Type, \Serializable, UTCDateTimeInterface
+final class UTCDateTime implements Type, \Serializable, \JsonSerializable, UTCDateTimeInterface
 {
 	public function serialize() : string { }
+
+	public function jsonSerialize() : mixed { }
 
 	public function unserialize(mixed $serialized) : void { }
 
